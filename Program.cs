@@ -16,11 +16,11 @@ namespace PomodoroTimer
 
     class PomodoroTimer
     {
-        const int WORKTIME = 10000, RESTTIME = 8000, NOTIFYTIME = 15000;
+        const int WORKTIME = 10000, RESTTIME = 8000, NOTIFYTIME = 15000, INSERT_KEYCODE = 45;
         const string PAUSE = "pause", NEXT = "next", RESTART = "restart", HELP = "help", QUIT = "quit";
         string Command = "";
         bool WaitForAnyInput = false;
-        ManualResetEvent TimerBlocker = new ManualResetEvent(false);
+        ManualResetEvent TimerBlocker = new ManualResetEvent(false), NotifyBlocker = new ManualResetEvent(false);
         SoundPlayer PeriodEndSound = new SoundPlayer(Path.Combine(Directory.GetCurrentDirectory(),
             "sounds", "lingeringbells.wav"));
         SoundPlayer NotificationSound = new SoundPlayer(Path.Combine(Directory.GetCurrentDirectory(),
@@ -91,7 +91,7 @@ namespace PomodoroTimer
                 // block thread for periodTime   
                 if (TimerBlocker.WaitOne(periodTime))   // if signalled
                 {
-                    // manually signalled, reset blocker
+                    // manually signalled, reset signal for next timerblock
                     TimerBlocker.Reset();
 
                     // handle commands
@@ -136,8 +136,16 @@ namespace PomodoroTimer
                     isWorkPeriod = !isWorkPeriod;
                     PeriodEndSound.Play();
 
-                    Console.Write("Period end, press enter to resume ");
-                    WaitForAnyUserInput(true);
+                    Thread notifyThread = new Thread(IntervalNotify);
+                    notifyThread.Start();
+
+                    Console.WriteLine("Period end, press Insert to resume");
+
+                    // Blocks until Insert is pressed
+                    InterceptKeys.Start(KeyPressCallback);
+
+                    // End notifyThread
+                    NotifyBlocker.Set();
                 }
             }
 
@@ -145,23 +153,32 @@ namespace PomodoroTimer
             Console.WriteLine("Quitting timer");
         }
 
+        bool KeyPressCallback(int pressedKeyCode)
+        {
+            // stop intercepting keys if Insert (our continue key) is pressed
+            return pressedKeyCode == INSERT_KEYCODE;
+        }
+
+        // play a notification sound every NOTIFYTIME seconds until signalled
+        void IntervalNotify()
+        {
+            while (!NotifyBlocker.WaitOne(NOTIFYTIME))
+            {
+                NotificationSound.Play();
+            }
+
+            // reset signal for next notifyblock
+            NotifyBlocker.Reset();
+        }
+
         // blocks thread until user enters any input; note: assumes blocker is unset
-        void WaitForAnyUserInput(bool notify = false)
+        void WaitForAnyUserInput()
         {
             WaitForAnyInput = true;
-            if (notify)
-            {
-                while (!TimerBlocker.WaitOne(NOTIFYTIME))
-                {
-                    // play a notification sound every NOTIFYTIME seconds until signalled
-                    NotificationSound.Play();
-                }
-            }
-            else
-            {
-                TimerBlocker.WaitOne();
-            }
+            TimerBlocker.WaitOne();
             WaitForAnyInput = false;
+
+            // reset signal for next timerblock
             TimerBlocker.Reset();
         }
 
