@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Media;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -16,18 +15,24 @@ namespace PomodoroTimer
 
     class PomodoroTimer
     {
-        const int WORKTIME = 10000, RESTTIME = 8000, NOTIFYTIME = 15000, INSERT_KEYCODE = 45;
+        const int WORKTIME = 1200000,   // 20 minutes
+                  RESTTIME = 20000,     // 20 seconds 
+                  NOTIFYTIME = 15000,   // 15 seconds
+                  INSERT_KEYCODE = 45;
         const string PAUSE = "pause", NEXT = "next", RESTART = "restart", HELP = "help", QUIT = "quit";
         string Command = "";
-        bool WaitForAnyInput = false;
+        bool WaitingOnReadLine = false;
         ManualResetEvent TimerBlocker = new ManualResetEvent(false), NotifyBlocker = new ManualResetEvent(false);
-        SoundPlayer PeriodEndSound = new SoundPlayer(Path.Combine(Directory.GetCurrentDirectory(),
-            "sounds", "lingeringbells.wav"));
-        SoundPlayer NotificationSound = new SoundPlayer(Path.Combine(Directory.GetCurrentDirectory(),
-            "sounds", "notify.wav"));
+        SoundPlayer PeriodEndSound, NotificationSound;
 
         public PomodoroTimer()
         {
+            // add wav files as resources
+            PeriodEndSound = new SoundPlayer();
+            NotificationSound = new SoundPlayer();
+            PeriodEndSound.Stream = Properties.Resources.periodend;
+            NotificationSound.Stream = Properties.Resources.notify;
+
             Thread userInThread = new Thread(UserIn);
             userInThread.Start();
 
@@ -35,7 +40,7 @@ namespace PomodoroTimer
             timerThread.Start();
 
             userInThread.Join();
-            timerThread.Join();
+            // timerThread.Join();
         }
 
         void Timer()
@@ -101,7 +106,7 @@ namespace PomodoroTimer
                         periodTime = (int)remainingPeriod.TotalMilliseconds;
 
                         Console.Write("Period paused, press enter to resume ");
-                        WaitForAnyUserInput();
+                        WaitForReadLineInput();
 
                         wasPaused = true;
                     }
@@ -141,16 +146,16 @@ namespace PomodoroTimer
 
                     Console.WriteLine("Period end, press Insert to resume");
 
-                    // Blocks until Insert is pressed
+                    // blocks until Insert is pressed
                     InterceptKeys.Start(KeyPressCallback);
 
-                    // End notifyThread
+                    // end notifyThread
                     NotifyBlocker.Set();
+
+                    // play a confirmation
+                    NotificationSound.Play();
                 }
             }
-
-            // exiting while loop implies user is quitting
-            Console.WriteLine("Quitting timer");
         }
 
         bool KeyPressCallback(int pressedKeyCode)
@@ -162,7 +167,7 @@ namespace PomodoroTimer
         // play a notification sound every NOTIFYTIME seconds until signalled
         void IntervalNotify()
         {
-            while (!NotifyBlocker.WaitOne(NOTIFYTIME))
+            while (!NotifyBlocker.WaitOne(NOTIFYTIME))  // while not signalled
             {
                 NotificationSound.Play();
             }
@@ -172,11 +177,11 @@ namespace PomodoroTimer
         }
 
         // blocks thread until user enters any input; note: assumes blocker is unset
-        void WaitForAnyUserInput()
+        void WaitForReadLineInput()
         {
-            WaitForAnyInput = true;
+            WaitingOnReadLine = true;
             TimerBlocker.WaitOne();
-            WaitForAnyInput = false;
+            WaitingOnReadLine = false;
 
             // reset signal for next timerblock
             TimerBlocker.Reset();
@@ -188,7 +193,8 @@ namespace PomodoroTimer
             while (Command != QUIT)
             {
                 Command = Console.ReadLine();
-                if (Command == PAUSE || Command == NEXT || Command.Contains(RESTART) || WaitForAnyInput)
+                if (Command == PAUSE || Command == NEXT || Command.Contains(RESTART) || 
+                    Command == QUIT || WaitingOnReadLine)
                 {
                     // unblocks timer
                     TimerBlocker.Set();
@@ -199,8 +205,10 @@ namespace PomodoroTimer
                 }
             }
 
-            // unblocks timer
-            TimerBlocker.Set();
+            Console.WriteLine("Quitting timer");
+
+            // handle any lingering keyboard hooks
+            System.Windows.Forms.Application.Exit(); 
         }
 
         void commandInfo()
