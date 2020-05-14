@@ -16,8 +16,8 @@ namespace PomodoroTimer
     class PomodoroTimer
     {
         const int WORKTIME = 1200000,   // 20 minutes
-                  RESTTIME = 20000,     // 20 seconds 
-                  NOTIFYTIME = 15000,   // 15 seconds
+                  RESTTIME = 30000,     // 30 seconds 
+                  NOTIFYTIME = 30000,   // 30 seconds
                   INSERT_KEYCODE = 45;
         const string PAUSE = "pause", NEXT = "next", RESTART = "restart", HELP = "help", QUIT = "quit";
         string Command = "";
@@ -29,8 +29,8 @@ namespace PomodoroTimer
         {
             // add wav files as resources
             PeriodEndSound = new SoundPlayer();
-            NotificationSound = new SoundPlayer();
             PeriodEndSound.Stream = Properties.Resources.periodend;
+            NotificationSound = new SoundPlayer();
             NotificationSound.Stream = Properties.Resources.notify;
 
             Thread userInThread = new Thread(UserIn);
@@ -131,7 +131,12 @@ namespace PomodoroTimer
 
                             periodTime = minsTemp + secsTemp;
                         }
-                        // else restart with normal period time
+                        else
+                        {
+                            // else restart with normal period time
+                            periodTime = isWorkPeriod ? WORKTIME : RESTTIME;
+                        }
+                        
                     }
                     // else Command == "quit" -> do nothing, while condition will handle it
                     
@@ -204,8 +209,6 @@ namespace PomodoroTimer
                     commandInfo();
                 }
             }
-
-            Console.WriteLine("Quitting timer");
 
             // handle any lingering keyboard hooks
             System.Windows.Forms.Application.Exit(); 
